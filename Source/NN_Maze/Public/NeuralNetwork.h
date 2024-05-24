@@ -9,17 +9,18 @@ class NN_MAZE_API UNeuralNetwork : public UObject
     GENERATED_BODY()
 
 public:
-
     void Initialize(const TArray<int32>& Layers);
     void CopyWeights(const UNeuralNetwork* SourceNetwork);
     TArray<float> FeedForward(const TArray<float>& Inputs);
     void Mutate(float Condition);
 
     UFUNCTION(BlueprintCallable)
-    int32 GetInputSize() const;
+        int32 GetInputSize() const;
 
     UPROPERTY(BlueprintReadWrite)
-    float Fitness;
+        float Fitness;
+
+public :
 
     TArray<int32> LayerSizes;
     TArray<TArray<float>> Neurons;

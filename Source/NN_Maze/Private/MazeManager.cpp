@@ -87,19 +87,26 @@ void AMazeManager::Tick(float DeltaTime)
                     {
                         UNeuralNetwork* Network = NewObject<UNeuralNetwork>(this, UNeuralNetwork::StaticClass());
                         Network->CopyWeights(CurrentGeneration[j]);
+                        float MutationRate = 0.0f;
                         switch (i)
                         {
                         case 1:
+                            MutationRate = 0.3f;
+                            break;
                         case 2:
-                            Network->Mutate(0.5f);
+                            MutationRate = 0.5f;
                             break;
                         case 3:
-                            Network->Mutate(2.f);
+                            MutationRate = 2.f;
                             break;
                         case 4:
-                            Network->Mutate(9.f);
+                            MutationRate = 9.f;
+                            break;
+                        default:
+                            MutationRate = 0.1f;
                             break;
                         }
+                        Network->Mutate(MutationRate);
                         NextGeneration.Add(Network);
                     }
                 }
