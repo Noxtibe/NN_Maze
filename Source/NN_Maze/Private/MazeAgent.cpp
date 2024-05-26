@@ -10,21 +10,24 @@ AMazeAgent::AMazeAgent()
     PrimaryActorTick.bCanEverTick = true;
 
     RotationSpeed = 300.f;
-    Speed = 0.5f;
-    MinVelocity = 0.0f;
-    MaxVelocity = 3.0f;
-    AccelerationRate = 0.2f;
-    DecelerationRate = 0.8f;
+    Speed = 1.0f; // Vitesse de base de l'agent
     MaxViewDistance = 30.f;
     FitnessTimeDecreaseRate = 10.f;
     FitnessCheckpointIncreaseRate = 100.f;
     Fitness = 0.f;
     IsActive = true;
-    CurrentVelocity = 0.f;
     DistanceTraveled = 0.f;
 
     // Configurez les collisions pour ignorer les raycasts
     GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+    GetCapsuleComponent()->SetCollisionProfileName(TEXT("Pawn"));
+    GetCapsuleComponent()->SetNotifyRigidBodyCollision(true); // Enable hit events
+
+    // Bind the OnHit function to the component's hit event
+    GetCapsuleComponent()->OnComponentHit.AddDynamic(this, &AMazeAgent::OnHit);
+
+    // Bind the OnBeginOverlap function to the actor's overlap event
+    OnActorBeginOverlap.AddDynamic(this, &AMazeAgent::OnBeginOverlap);
 }
 
 void AMazeAgent::BeginPlay()
@@ -51,10 +54,7 @@ void AMazeAgent::Tick(float DeltaTime)
 
     if (Outputs.Num() > 0)
     {
-        CurrentVelocity += (AccelerationRate * DeltaTime) * Outputs[0];
-        CurrentVelocity = FMath::Clamp(CurrentVelocity, MinVelocity, MaxVelocity);
-
-        FVector MoveDirection = GetActorForwardVector() * CurrentVelocity * DeltaTime;
+        FVector MoveDirection = GetActorForwardVector() * Speed * Outputs[0] * DeltaTime;
         FVector NewLocation = GetActorLocation() + MoveDirection;
         SetActorLocation(NewLocation);
 
@@ -64,7 +64,7 @@ void AMazeAgent::Tick(float DeltaTime)
         SetActorRotation(NewRotation);
 
         // Ajout de messages de debug pour le mouvement
-        UE_LOG(LogTemp, Log, TEXT("Agent MoveDir: %s, CurrentVelocity: %.2f, RotationAngle: %.2f"), *MoveDirection.ToString(), CurrentVelocity, RotationAngle);
+        UE_LOG(LogTemp, Log, TEXT("Agent MoveDir: %s, Speed: %.2f, RotationAngle: %.2f"), *MoveDirection.ToString(), Speed, RotationAngle);
     }
     else
     {
@@ -74,11 +74,12 @@ void AMazeAgent::Tick(float DeltaTime)
     RaycastVision();
 
     FVector AgentPosition = GetActorLocation();
-    DistanceTraveled += FVector::Dist(AgentPosition, LastPosition);
+    float DistanceDelta = FVector::Dist(AgentPosition, LastPosition);
+    DistanceTraveled += DistanceDelta;
     LastPosition = AgentPosition;
-    if (DistanceTraveled > 0.2f)
+    if (DistanceDelta > 0.2f)
     {
-        Fitness += DistanceTraveled / 100;
+        Fitness += DistanceDelta / 100;
     }
     Fitness -= DeltaTime * FitnessTimeDecreaseRate;
 
@@ -98,30 +99,17 @@ void AMazeAgent::RaycastVision()
     FHitResult Hit;
     FCollisionQueryParams CollisionParams;
 
-    // Forward Ray
-    bool bHitForward = GetWorld()->LineTraceSingleByChannel(Hit, AgentPosition, AgentPosition + ForwardDir * MaxViewDistance, ECC_Visibility, CollisionParams);
-    DistForward = bHitForward ? Hit.Distance : MaxViewDistance;
-    DrawDebugLine(GetWorld(), AgentPosition, AgentPosition + ForwardDir * MaxViewDistance, bHitForward ? FColor::Red : FColor::Green, false, -1, 0, 1);
+    auto PerformRaycast = [&](const FVector& Direction, float& Distance)
+    {
+        bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, AgentPosition, AgentPosition + Direction * MaxViewDistance, ECC_Visibility, CollisionParams);
+        Distance = bHit ? Hit.Distance : MaxViewDistance;
+    };
 
-    // Left Ray
-    bool bHitLeft = GetWorld()->LineTraceSingleByChannel(Hit, AgentPosition, AgentPosition + LeftDir * MaxViewDistance, ECC_Visibility, CollisionParams);
-    DistLeft = bHitLeft ? Hit.Distance : MaxViewDistance;
-    DrawDebugLine(GetWorld(), AgentPosition, AgentPosition + LeftDir * MaxViewDistance, bHitLeft ? FColor::Red : FColor::Green, false, -1, 0, 1);
-
-    // Left Diagonal Ray
-    bool bHitLeftDiag = GetWorld()->LineTraceSingleByChannel(Hit, AgentPosition, AgentPosition + LeftDiagDir * MaxViewDistance, ECC_Visibility, CollisionParams);
-    DistDiagLeft = bHitLeftDiag ? Hit.Distance : MaxViewDistance;
-    DrawDebugLine(GetWorld(), AgentPosition, AgentPosition + LeftDiagDir * MaxViewDistance, bHitLeftDiag ? FColor::Red : FColor::Green, false, -1, 0, 1);
-
-    // Right Ray
-    bool bHitRight = GetWorld()->LineTraceSingleByChannel(Hit, AgentPosition, AgentPosition + RightDir * MaxViewDistance, ECC_Visibility, CollisionParams);
-    DistRight = bHitRight ? Hit.Distance : MaxViewDistance;
-    DrawDebugLine(GetWorld(), AgentPosition, AgentPosition + RightDir * MaxViewDistance, bHitRight ? FColor::Red : FColor::Green, false, -1, 0, 1);
-
-    // Right Diagonal Ray
-    bool bHitRightDiag = GetWorld()->LineTraceSingleByChannel(Hit, AgentPosition, AgentPosition + RightDiagDir * MaxViewDistance, ECC_Visibility, CollisionParams);
-    DistDiagRight = bHitRightDiag ? Hit.Distance : MaxViewDistance;
-    DrawDebugLine(GetWorld(), AgentPosition, AgentPosition + RightDiagDir * MaxViewDistance, bHitRightDiag ? FColor::Red : FColor::Green, false, -1, 0, 1);
+    PerformRaycast(ForwardDir, DistForward);
+    PerformRaycast(LeftDir, DistLeft);
+    PerformRaycast(LeftDiagDir, DistDiagLeft);
+    PerformRaycast(RightDir, DistRight);
+    PerformRaycast(RightDiagDir, DistDiagRight);
 }
 
 void AMazeAgent::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -129,20 +117,42 @@ void AMazeAgent::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent
     Super::SetupPlayerInputComponent(PlayerInputComponent);
 }
 
-void AMazeAgent::NotifyHit(UPrimitiveComponent* MyComp, AActor* Other, UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
+void AMazeAgent::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
-    if (Other->ActorHasTag("Wall"))
+    if (OtherActor && (OtherActor != this) && OtherComp)
     {
-        LastPosition = GetActorLocation();
-        Fitness -= FitnessCheckpointIncreaseRate;
-        IsActive = false;
-    }
-    else if (Other->ActorHasTag("Checkpoint") && IsActive)
-    {
-        ACheckpoint* Checkpoint = Cast<ACheckpoint>(Other);
-        if (Checkpoint)
+        if (OtherActor->ActorHasTag("Wall"))
         {
-            Fitness += FitnessCheckpointIncreaseRate * Checkpoint->RewardMultiplier;
+            LastPosition = GetActorLocation();
+            Fitness -= FitnessCheckpointIncreaseRate;
+            IsActive = false;
+
+            // Debug message when hitting a wall
+            /*if (GEngine)
+            {
+                GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("Hit a wall!"));
+            }*/
+        }
+    }
+}
+
+void AMazeAgent::OnBeginOverlap(AActor* OverlappedActor, AActor* OtherActor)
+{
+    if (OtherActor && (OtherActor != this))
+    {
+        if (OtherActor->ActorHasTag("Checkpoint") && IsActive)
+        {
+            ACheckpoint* Checkpoint = Cast<ACheckpoint>(OtherActor);
+            if (Checkpoint)
+            {
+                Fitness += FitnessCheckpointIncreaseRate * Checkpoint->RewardMultiplier;
+
+                // Debug message when hitting a checkpoint
+                /*if (GEngine)
+                {
+                    GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, TEXT("Hit a checkpoint!"));
+                }*/
+            }
         }
     }
 }

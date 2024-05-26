@@ -7,7 +7,7 @@
 UCLASS()
 class NN_MAZE_API AMazeAgent : public ACharacter
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
 
@@ -16,7 +16,6 @@ public:
 protected:
 
     virtual void BeginPlay() override;
-    virtual void NotifyHit(UPrimitiveComponent* MyComp, AActor* Other, UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit) override;
 
 public:
 
@@ -30,18 +29,6 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
         float Speed;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
-        float MinVelocity;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
-        float MaxVelocity;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
-        float AccelerationRate;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
-        float DecelerationRate;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Vision")
         float MaxViewDistance;
@@ -76,11 +63,17 @@ public:
     UPROPERTY(BlueprintReadWrite, Category = "Input")
         float DistDiagRight;
 
+public :
+
     FVector MoveDir;
-    float CurrentVelocity;
-
-protected:
-
     FVector LastPosition;
     float DistanceTraveled;
+
+public:
+
+    UFUNCTION()
+        void OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
+
+    UFUNCTION()
+        void OnBeginOverlap(AActor* OverlappedActor, AActor* OtherActor);
 };

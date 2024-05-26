@@ -1,4 +1,5 @@
 #pragma once
+
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "MazeAgent.h"
@@ -8,8 +9,8 @@
 UCLASS()
 class NN_MAZE_API AMazeManager : public AActor
 {
-	GENERATED_BODY()
-	
+    GENERATED_BODY()
+
 public:
 
     AMazeManager();
@@ -34,7 +35,7 @@ public:
     UPROPERTY(EditAnywhere, Category = "Agent")
         float TimeLimit;
 
-private:
+private :
 
     int32 GenerationCount;
     bool bIsTraining;
@@ -49,6 +50,8 @@ private:
     void CloseTimer();
     void InitAgentNetworks();
     void CreateAgents();
+    void UpdateAgents(float DeltaTime);
+    void ProcessGeneration();
 
     FTimerHandle TimerHandle_CloseTimer;
 };

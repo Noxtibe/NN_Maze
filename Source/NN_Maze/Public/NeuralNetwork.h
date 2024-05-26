@@ -9,9 +9,10 @@ class NN_MAZE_API UNeuralNetwork : public UObject
     GENERATED_BODY()
 
 public:
+
     void Initialize(const TArray<int32>& Layers);
     void CopyWeights(const UNeuralNetwork* SourceNetwork);
-    TArray<float> FeedForward(const TArray<float>& Inputs);
+    TArray<float> FeedForward(const TArray<float>& Inputs) const;
     void Mutate(float Condition);
 
     UFUNCTION(BlueprintCallable)

@@ -40,6 +40,12 @@ void UNeuralNetwork::CopyWeights(const UNeuralNetwork* SourceNetwork)
         return;
     }
 
+    if (SourceNetwork->LayerSizes != LayerSizes)
+    {
+        UE_LOG(LogTemp, Error, TEXT("SourceNetwork LayerSizes do not match in CopyWeights"));
+        return;
+    }
+
     LayerSizes = SourceNetwork->LayerSizes;
     Neurons = SourceNetwork->Neurons;
 
@@ -58,23 +64,18 @@ void UNeuralNetwork::CopyWeights(const UNeuralNetwork* SourceNetwork)
     }
 }
 
-TArray<float> UNeuralNetwork::FeedForward(const TArray<float>& Inputs)
+TArray<float> UNeuralNetwork::FeedForward(const TArray<float>& Inputs) const
 {
-    if (LayerSizes.Num() == 0)
-    {
-        UE_LOG(LogTemp, Error, TEXT("FeedForward called with empty LayerSizes"));
-        return TArray<float>();
-    }
-
     if (Inputs.Num() != GetInputSize())
     {
         UE_LOG(LogTemp, Warning, TEXT("Invalid input size for neural network. Expected: %d, Got: %d"), GetInputSize(), Inputs.Num());
         return TArray<float>();
     }
 
+    TArray<TArray<float>> CurrentNeurons = Neurons;
     for (int32 i = 0; i < Inputs.Num(); i++)
     {
-        Neurons[0][i] = Inputs[i];
+        CurrentNeurons[0][i] = Inputs[i];
     }
 
     for (int32 i = 1; i < LayerSizes.Num(); i++)
@@ -84,13 +85,13 @@ TArray<float> UNeuralNetwork::FeedForward(const TArray<float>& Inputs)
             float Value = 0.f;
             for (int32 k = 0; k < LayerSizes[i - 1]; k++)
             {
-                Value += Weights[i - 1][j][k] * Neurons[i - 1][k];
+                Value += Weights[i - 1][j][k] * CurrentNeurons[i - 1][k];
             }
-            Neurons[i][j] = tanh(Value);
+            CurrentNeurons[i][j] = tanh(Value);
         }
     }
 
-    return Neurons.Last();
+    return CurrentNeurons.Last();
 }
 
 void UNeuralNetwork::Mutate(float Condition)
@@ -114,7 +115,7 @@ int32 UNeuralNetwork::GetInputSize() const
 {
     if (LayerSizes.Num() == 0)
     {
-        UE_LOG(LogTemp, Error, TEXT("LayerSizes is empty"));
+        UE_LOG(LogTemp, Error, TEXT("LayerSizes is empty in GetInputSize"));
         return 0;
     }
 
