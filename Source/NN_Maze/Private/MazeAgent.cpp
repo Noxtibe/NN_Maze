@@ -34,7 +34,7 @@ void AMazeAgent::BeginPlay()
 {
     Super::BeginPlay();
     LastPosition = GetActorLocation();
-
+    
     if (GetCharacterMovement())
     {
         UE_LOG(LogTemp, Log, TEXT("CharacterMovement component is valid and configured."));

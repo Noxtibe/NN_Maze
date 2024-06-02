@@ -127,6 +127,8 @@ void AMazeManager::UpdateAgents(float DeltaTime)
 
                 TArray<float> Inputs = { Vel, DistForward, DistLeft, DistDiagLeft, DistRight, DistDiagRight };
 
+                
+                
                 // Ajout de messages de debug pour les entrées du réseau de neurones
                 UE_LOG(LogTemp, Log, TEXT("Agent %d Inputs: Vel=%.2f, DistForward=%.2f, DistLeft=%.2f, DistDiagLeft=%.2f, DistRight=%.2f, DistDiagRight=%.2f"),
                     i, Vel, DistForward, DistLeft, DistDiagLeft, DistRight, DistDiagRight);
