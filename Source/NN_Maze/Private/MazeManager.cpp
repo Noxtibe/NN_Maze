@@ -1,5 +1,7 @@
 #include "MazeManager.h"
 #include "MazeAgent.h"
+#include "NeuralNetwork.h"
+#include "EvolutionManager.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "Kismet/GameplayStatics.h"
@@ -7,9 +9,11 @@
 AMazeManager::AMazeManager()
 {
     PrimaryActorTick.bCanEverTick = true;
-    StartPosition = FVector(20.f, 0.f, -20.f);
-    PopulationSize = 1; // Utilisation d'un seul agent pour la simulation
-    TimeLimit = 30.f; // Ajustez selon vos besoins, ici on allonge la génération
+
+    // Default property initialization
+    StartPosition = FVector(0.0f, 0.0f, 0.0f);
+    PopulationSize = 5;  // Ensure this is set greater than 0 in the editor
+    TimeLimit = 10.f;    // Generation duration in seconds
     GenerationCount = 0;
     bIsTraining = false;
     GenerationFitnessMean = 0.f;
@@ -20,10 +24,18 @@ AMazeManager::AMazeManager()
 void AMazeManager::BeginPlay()
 {
     Super::BeginPlay();
+
+    UE_LOG(LogTemp, Log, TEXT("MazeManager BeginPlay: Starting Generation %d"), GenerationCount);
+
+    // Initialize neural networks for the current generation
     InitAgentNetworks();
+    // Create agents and assign them their neural networks
     CreateAgents();
+    // Set the timer to end the generation
     GetWorld()->GetTimerManager().SetTimer(TimerHandle_CloseTimer, this, &AMazeManager::CloseTimer, TimeLimit, false);
     bIsTraining = true;
+
+    EvolutionManager = NewObject<UEvolutionManager>(this, UEvolutionManager::StaticClass());
 }
 
 void AMazeManager::Tick(float DeltaTime)
@@ -35,17 +47,21 @@ void AMazeManager::Tick(float DeltaTime)
         TotalSimulationTime += DeltaTime;
     }
 
-    FString DebugMessage = FString::Printf(TEXT("Total Simulation Time: %.2f seconds\nTotal Simulations: %d\nCurrent Generation: %d"), TotalSimulationTime, TotalSimulations, GenerationCount);
+    // Display debug information on screen
+    FString DebugMessage = FString::Printf(TEXT("Simulation Time: %.2f sec, Total Simulations: %d, Generation: %d"),
+        TotalSimulationTime, TotalSimulations, GenerationCount);
     if (GEngine)
     {
         GEngine->AddOnScreenDebugMessage(-1, 0.f, FColor::Yellow, DebugMessage);
     }
 
+    // If training time is over, process the evolution cycle
     if (!bIsTraining)
     {
         ProcessGeneration();
     }
 
+    // Optionally update agents—each agent’s own Tick handles its neural network processing
     UpdateAgents(DeltaTime);
 }
 
@@ -54,194 +70,129 @@ void AMazeManager::CloseTimer()
     GenerationCount++;
     TotalSimulations += PopulationSize;
     bIsTraining = false;
+    UE_LOG(LogTemp, Log, TEXT("Generation %d complete. Total simulations: %d"), GenerationCount, TotalSimulations);
 }
 
 void AMazeManager::InitAgentNetworks()
 {
+    // Clear any previous generation networks.
     CurrentGeneration.Empty();
+
+    // Use the editable network configuration; if empty, use a default.
+    TArray<int32> LayerConfig = NetworkLayerConfiguration;
+    if (LayerConfig.Num() == 0)
+    {
+        LayerConfig = { 6, 8, 10, 6, 2 };
+        UE_LOG(LogTemp, Warning, TEXT("NetworkLayerConfiguration is empty. Using default configuration."));
+    }
+
+    // Create a new neural network for each agent in the population.
     for (int32 i = 0; i < PopulationSize; i++)
     {
         UNeuralNetwork* Net = NewObject<UNeuralNetwork>(this, UNeuralNetwork::StaticClass());
-        TArray<int32> LayerConfig = { 6, 8, 10, 6, 2 }; // Exemple de layers
+        if (!Net)
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to create neural network for agent %d"), i);
+            continue;
+        }
         Net->Initialize(LayerConfig);
+        // Apply an initial mutation for diversity
         Net->Mutate(0.5f);
         CurrentGeneration.Add(Net);
     }
+    UE_LOG(LogTemp, Log, TEXT("Initialized %d neural networks for the current generation."), CurrentGeneration.Num());
 }
 
 void AMazeManager::CreateAgents()
 {
+    UE_LOG(LogTemp, Log, TEXT("CreateAgents() called. PopulationSize: %d"), PopulationSize);
+
+    // Safely destroy existing agents.
     for (AMazeAgent* Agent : Agents)
     {
-        if (Agent)
+        if (Agent && IsValid(Agent))
         {
             Agent->Destroy();
         }
     }
     Agents.Empty();
 
+    // Check that the AgentBlueprint is set
+    if (!AgentBlueprint)
+    {
+        UE_LOG(LogTemp, Error, TEXT("AgentBlueprint is not set! Please assign a valid MazeAgent Blueprint in MazeManager."));
+        return;
+    }
+
+    // Spawn new agents and assign each its corresponding neural network.
     for (int32 i = 0; i < PopulationSize; i++)
     {
-        if (AgentBlueprint)
+        FVector SpawnLocation = StartPosition;
+        FRotator SpawnRotation = FRotator::ZeroRotator;
+        UE_LOG(LogTemp, Log, TEXT("Spawning Agent %d at location %s"), i, *SpawnLocation.ToString());
+
+        // Spawn the agent safely
+        AMazeAgent* NewAgent = GetWorld()->SpawnActor<AMazeAgent>(AgentBlueprint, SpawnLocation, SpawnRotation);
+        if (!NewAgent)
         {
-            FVector SpawnLocation = StartPosition; // Utilisation de la même position de spawn
-            FRotator SpawnRotation = FRotator::ZeroRotator;
-            AMazeAgent* Agent = GetWorld()->SpawnActor<AMazeAgent>(AgentBlueprint, SpawnLocation, SpawnRotation);
-            if (Agent)
-            {
-                // Associez le réseau de neurones à l'agent
-                if (CurrentGeneration.IsValidIndex(i))
-                {
-                    Agent->Outputs = TArray<float>(); // Réinitialiser les sorties pour le nouvel agent
-                }
-                Agents.Add(Agent);
-            }
-            else
-            {
-                UE_LOG(LogTemp, Error, TEXT("Failed to spawn agent %d"), i);
-            }
+            UE_LOG(LogTemp, Error, TEXT("Failed to spawn agent %d"), i);
+            continue;
+        }
+
+        // Verify that a neural network exists for this index; if not, log warning.
+        if (CurrentGeneration.IsValidIndex(i) && CurrentGeneration[i])
+        {
+            NewAgent->NeuralNet = CurrentGeneration[i];
         }
         else
         {
-            UE_LOG(LogTemp, Error, TEXT("AgentBlueprint is not set."));
+            UE_LOG(LogTemp, Warning, TEXT("CurrentGeneration does not have a valid neural network at index %d"), i);
+            NewAgent->NeuralNet = nullptr;
         }
+        Agents.Add(NewAgent);
+        UE_LOG(LogTemp, Log, TEXT("Agent %d spawned successfully."), i);
     }
 }
 
 void AMazeManager::UpdateAgents(float DeltaTime)
 {
-    for (int32 i = 0; i < PopulationSize; i++)
-    {
-        if (Agents.IsValidIndex(i) && CurrentGeneration.IsValidIndex(i))
-        {
-            AMazeAgent* Agent = Agents[i];
-            UNeuralNetwork* Network = CurrentGeneration[i];
-            if (Agent && Network && Network->LayerSizes.Num() > 0)
-            {
-                float Vel = Agent->Speed / Agent->MaxViewDistance;
-                float DistForward = Agent->DistForward / Agent->MaxViewDistance;
-                float DistLeft = Agent->DistLeft / Agent->MaxViewDistance;
-                float DistDiagLeft = Agent->DistDiagLeft / Agent->MaxViewDistance;
-                float DistRight = Agent->DistRight / Agent->MaxViewDistance;
-                float DistDiagRight = Agent->DistDiagRight / Agent->MaxViewDistance;
-
-                TArray<float> Inputs = { Vel, DistForward, DistLeft, DistDiagLeft, DistRight, DistDiagRight };
-
-                
-                
-                // Ajout de messages de debug pour les entrées du réseau de neurones
-                UE_LOG(LogTemp, Log, TEXT("Agent %d Inputs: Vel=%.2f, DistForward=%.2f, DistLeft=%.2f, DistDiagLeft=%.2f, DistRight=%.2f, DistDiagRight=%.2f"),
-                    i, Vel, DistForward, DistLeft, DistDiagLeft, DistRight, DistDiagRight);
-
-                // Vérifiez que Network n'est pas null avant d'appeler GetInputSize()
-                if (Inputs.Num() == Network->GetInputSize())
-                {
-                    TArray<float> Outputs = Network->FeedForward(Inputs);
-
-                    // Ajout de messages de debug pour les sorties du réseau de neurones
-                    if (Outputs.Num() >= 2)
-                    {
-                        UE_LOG(LogTemp, Log, TEXT("Agent %d Outputs: Speed=%.2f, Rotation=%.2f"), i, Outputs[0], Outputs[1]);
-                    }
-
-                    Agent->Outputs = Outputs;
-
-                    // Ajout de messages de debug pour le mouvement de l'agent
-                    UE_LOG(LogTemp, Log, TEXT("Agent %d MoveDir: %.2f, Speed: %.2f"), i, Agent->MoveDir.Size(), Agent->Speed);
-                }
-                else
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("Invalid input size for neural network. Expected: %d, Got: %d"), Network->GetInputSize(), Inputs.Num());
-                }
-            }
-        }
-    }
+    // Agents are handling their own updates in their Tick() functions.
 }
 
 void AMazeManager::ProcessGeneration()
 {
-    if (GenerationCount == 0)
+    UE_LOG(LogTemp, Log, TEXT("Processing Generation %d"), GenerationCount);
+
+    // (Optional) Update the fitness values from agents to the respective neural networks.
+    // For each agent, assign its fitness to its network.
+    for (int32 i = 0; i < PopulationSize; i++)
     {
-        InitAgentNetworks();
-        CreateAgents();
-        GetWorld()->GetTimerManager().SetTimer(TimerHandle_CloseTimer, this, &AMazeManager::CloseTimer, TimeLimit, false);
-        bIsTraining = true;
+        if (Agents.IsValidIndex(i))
+        {
+            AMazeAgent* Agent = Agents[i];
+            if (Agent && CurrentGeneration.IsValidIndex(i) && CurrentGeneration[i])
+            {
+                CurrentGeneration[i]->Fitness = Agent->Fitness;
+            }
+        }
     }
-    else
+
+    // Delegate the evolution processing to the evolution manager.
+    float NewGenerationAverageFitness = 0.f;
+    if (EvolutionManager)
     {
-        GenerationFitnessMean = 0.f;
-        for (int32 i = 0; i < PopulationSize; i++)
-        {
-            if (Agents.IsValidIndex(i) && CurrentGeneration.IsValidIndex(i))
-            {
-                AMazeAgent* Agent = Agents[i];
-                if (Agent)
-                {
-                    float Fitness = Agent->Fitness;
-                    if (CurrentGeneration[i])
-                    {
-                        CurrentGeneration[i]->Fitness = Fitness;
-                        GenerationFitnessMean += CurrentGeneration[i]->Fitness;
-                    }
-                }
-            }
-        }
-        GenerationFitnessMean /= PopulationSize;
-
-        CurrentGeneration.Sort([](const UNeuralNetwork& A, const UNeuralNetwork& B) {
-            return A.Fitness > B.Fitness;
-            });
-
-        NextGeneration.Empty();
-        for (int32 i = 0; i < 5; i++)
-        {
-            for (int32 j = 0; j < PopulationSize / 5; j++)
-            {
-                if (CurrentGeneration.IsValidIndex(j) && CurrentGeneration[j])
-                {
-                    UNeuralNetwork* Network = NewObject<UNeuralNetwork>(this, UNeuralNetwork::StaticClass());
-                    TArray<int32> LayerConfig = CurrentGeneration[j]->LayerSizes; // Utiliser la même configuration de couches
-                    Network->Initialize(LayerConfig);
-                    Network->CopyWeights(CurrentGeneration[j]);
-
-                    float MutationRate = 0.1f;
-                    switch (i)
-                    {
-                    case 0:
-                        MutationRate = 0.1f;
-                        break;
-                    case 1:
-                        MutationRate = 0.3f;
-                        break;
-                    case 2:
-                        MutationRate = 0.5f;
-                        break;
-                    case 3:
-                        MutationRate = 2.f;
-                        break;
-                    case 4:
-                        MutationRate = 9.f;
-                        break;
-                    }
-                    Network->Mutate(MutationRate);
-                    NextGeneration.Add(Network);
-                }
-            }
-        }
-
-        // Ajout de vérifications de validité des réseaux avant de remplacer la génération actuelle
-        for (UNeuralNetwork* Network : NextGeneration)
-        {
-            if (!Network || Network->LayerSizes.Num() == 0)
-            {
-                UE_LOG(LogTemp, Error, TEXT("Invalid network in NextGeneration."));
-                return;
-            }
-        }
-
-        CurrentGeneration = NextGeneration;
-        CreateAgents();
-        GetWorld()->GetTimerManager().SetTimer(TimerHandle_CloseTimer, this, &AMazeManager::CloseTimer, TimeLimit, false);
-        bIsTraining = true;
+        EvolutionManager->ProcessGeneration(CurrentGeneration, NextGeneration, NewGenerationAverageFitness, PopulationSize);
     }
+
+    UE_LOG(LogTemp, Log, TEXT("Average fitness for Generation %d: %.2f"), GenerationCount, NewGenerationAverageFitness);
+
+    // Replace the current generation with the new generation
+    CurrentGeneration = NextGeneration;
+
+    // Spawn new agents for the new generation
+    CreateAgents();
+
+    // Restart the generation timer and resume training
+    GetWorld()->GetTimerManager().SetTimer(TimerHandle_CloseTimer, this, &AMazeManager::CloseTimer, TimeLimit, false);
+    bIsTraining = true;
 }

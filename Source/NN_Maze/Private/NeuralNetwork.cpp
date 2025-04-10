@@ -72,26 +72,32 @@ TArray<float> UNeuralNetwork::FeedForward(const TArray<float>& Inputs) const
         return TArray<float>();
     }
 
-    TArray<TArray<float>> CurrentNeurons = Neurons;
-    for (int32 i = 0; i < Inputs.Num(); i++)
-    {
-        CurrentNeurons[0][i] = Inputs[i];
-    }
+    // Use a single array for current outputs, starting with the input layer
+    TArray<float> CurrentOutputs = Inputs;
 
-    for (int32 i = 1; i < LayerSizes.Num(); i++)
+    // Process each subsequent layer
+    for (int32 layerIndex = 1; layerIndex < LayerSizes.Num(); ++layerIndex)
     {
-        for (int32 j = 0; j < LayerSizes[i]; j++)
+        int32 currentLayerSize = LayerSizes[layerIndex];
+        TArray<float> NextOutputs;
+        NextOutputs.SetNumZeroed(currentLayerSize);
+
+        int32 previousLayerSize = LayerSizes[layerIndex - 1];
+        for (int32 neuronIndex = 0; neuronIndex < currentLayerSize; ++neuronIndex)
         {
-            float Value = 0.f;
-            for (int32 k = 0; k < LayerSizes[i - 1]; k++)
+            float Sum = 0.f;
+            // Multiply previous layer outputs by the weights and sum
+            for (int32 prevIndex = 0; prevIndex < previousLayerSize; ++prevIndex)
             {
-                Value += Weights[i - 1][j][k] * CurrentNeurons[i - 1][k];
+                Sum += Weights[layerIndex - 1][neuronIndex][prevIndex] * CurrentOutputs[prevIndex];
             }
-            CurrentNeurons[i][j] = tanh(Value);
+            NextOutputs[neuronIndex] = tanh(Sum);
         }
+        // Use the computed outputs for the next layer
+        CurrentOutputs = MoveTemp(NextOutputs);
     }
 
-    return CurrentNeurons.Last();
+    return CurrentOutputs;
 }
 
 void UNeuralNetwork::Mutate(float Condition)
