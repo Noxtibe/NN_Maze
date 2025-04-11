@@ -75,18 +75,19 @@ void AMazeManager::CloseTimer()
 
 void AMazeManager::InitAgentNetworks()
 {
-    // Clear any previous generation networks.
+    // Clear any previous networks.
     CurrentGeneration.Empty();
 
-    // Use the editable network configuration; if empty, use a default.
+    // Use the editable network configuration; if empty, use a default for 8 inputs.
     TArray<int32> LayerConfig = NetworkLayerConfiguration;
     if (LayerConfig.Num() == 0)
     {
-        LayerConfig = { 6, 8, 10, 6, 2 };
-        UE_LOG(LogTemp, Warning, TEXT("NetworkLayerConfiguration is empty. Using default configuration."));
+        // Default: 8 inputs, two hidden layers of 16 neurons each, then 8, then 2 outputs.
+        LayerConfig = { 8, 16, 16, 8, 2 };
+        UE_LOG(LogTemp, Warning, TEXT("NetworkLayerConfiguration is empty. Using default configuration {8,16,16,8,2}."));
     }
 
-    // Create a new neural network for each agent in the population.
+    // Create a new neural network for each agent.
     for (int32 i = 0; i < PopulationSize; i++)
     {
         UNeuralNetwork* Net = NewObject<UNeuralNetwork>(this, UNeuralNetwork::StaticClass());
@@ -96,7 +97,7 @@ void AMazeManager::InitAgentNetworks()
             continue;
         }
         Net->Initialize(LayerConfig);
-        // Apply an initial mutation for diversity
+        // Apply an initial mutation for diversity (tune the mutation probability as needed)
         Net->Mutate(0.5f);
         CurrentGeneration.Add(Net);
     }

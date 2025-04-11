@@ -68,29 +68,58 @@ void AMazeAgent::Tick(float DeltaTime)
     // Update sensor data via raycast (with smoothing)
     RaycastVision();
 
+    // Update relative sensors towards exit
+    if (ExitLocation != FVector::ZeroVector)
+    {
+        // Compute vector from the agent to the exit.
+        FVector ToExit = ExitLocation - GetActorLocation();
+        float DistanceToExit = ToExit.Size();
+        // Assume a maximum relevant distance (adjustable as needed)
+        float MaxRelevantDistance = 1000.f;
+        NormalizedDistanceToExit = FMath::Clamp(DistanceToExit / MaxRelevantDistance, 0.f, 1.f);
+
+        FVector ToExitNormalized = ToExit.GetSafeNormal();
+        // Compute the angle (in radians) between the agent's forward and the direction to exit.
+        float Angle = FMath::Acos(FVector::DotProduct(GetActorForwardVector(), ToExitNormalized));
+        // Determine the sign (left or right) using the cross product's Z component.
+        float Sign = (FVector::CrossProduct(GetActorForwardVector(), ToExitNormalized)).Z > 0 ? 1.0f : -1.0f;
+        // Normalize the angle to the range [-1, 1]
+        RelativeAngleToExit = (Angle * Sign) / PI;
+    }
+    else
+    {
+        RelativeAngleToExit = 0.f;
+        NormalizedDistanceToExit = 1.f;
+    }
+    // --- End new sensor update ---
+
     // Process neural network output if assigned
     if (NeuralNet)
     {
         ProcessNeuralNetwork();
     }
 
-    // Update fitness based on distance traveled and time penalty using dedicated functions.
+    // Update fitness using dedicated functions.
     FVector CurrentPosition = GetActorLocation();
     float DeltaDistance = FVector::Dist(CurrentPosition, LastPosition);
     DistanceTraveled += DeltaDistance;
     LastPosition = CurrentPosition;
-
     if (DeltaDistance > 0.2f)
     {
         ApplyDistanceReward(DeltaDistance);
     }
-
     ApplyTimePenalty(DeltaTime);
+
+    // Logging: Optionally, log agent position and fitness.
+    // UE_LOG(LogTemp, Log, TEXT("Agent Position: %s, Fitness: %.2f"), *CurrentPosition.ToString(), Fitness);
+
+    // Visualization: Draw debug line to visualize the path taken.
+    DrawDebugLine(GetWorld(), LastPosition, CurrentPosition, FColor::Green, false, 5.f, 0, 2.f);
 }
 
 void AMazeAgent::ProcessNeuralNetwork()
 {
-    // Normalize sensor inputs
+    // Normalize primary sensor inputs using MaxViewDistance.
     float NormalizedSpeed = Speed / MaxViewDistance;
     float NormForward = DistForward / MaxViewDistance;
     float NormLeft = DistLeft / MaxViewDistance;
@@ -98,7 +127,17 @@ void AMazeAgent::ProcessNeuralNetwork()
     float NormRight = DistRight / MaxViewDistance;
     float NormDiagRight = DistDiagRight / MaxViewDistance;
 
-    TArray<float> Inputs = { NormalizedSpeed, NormForward, NormLeft, NormDiagLeft, NormRight, NormDiagRight };
+    // Build the input array including the two new sensor inputs.
+    TArray<float> Inputs = {
+        NormalizedSpeed,
+        NormForward,
+        NormLeft,
+        NormDiagLeft,
+        NormRight,
+        NormDiagRight,
+        RelativeAngleToExit,     // Relative angle to exit (normalized)
+        NormalizedDistanceToExit // Normalized distance to exit
+    };
 
     if (Inputs.Num() != NeuralNet->GetInputSize())
     {
@@ -107,7 +146,7 @@ void AMazeAgent::ProcessNeuralNetwork()
         return;
     }
 
-    // Feed inputs through the neural network
+    // Feed inputs to the neural network.
     TArray<float> NNOutputs = NeuralNet->FeedForward(Inputs);
     if (NNOutputs.Num() < 2)
     {
@@ -115,15 +154,15 @@ void AMazeAgent::ProcessNeuralNetwork()
         return;
     }
 
-    // Interpret outputs: first value as speed multiplier, second as rotation delta
+    // Interpret outputs: NNOutputs[0] is used as speed multiplier, NNOutputs[1] as rotation delta.
     float SpeedMultiplier = NNOutputs[0];
     float RotationDelta = NNOutputs[1];
 
-    // Move the agent according to the neural network output
+    // Move agent based on neural network output.
     FVector MoveDelta = GetActorForwardVector() * Speed * SpeedMultiplier * GetWorld()->GetDeltaSeconds();
     SetActorLocation(GetActorLocation() + MoveDelta);
 
-    // Apply rotation
+    // Apply rotation.
     FRotator NewRotation = GetActorRotation();
     NewRotation.Yaw += RotationDelta * RotationSpeed * GetWorld()->GetDeltaSeconds();
     SetActorRotation(NewRotation);

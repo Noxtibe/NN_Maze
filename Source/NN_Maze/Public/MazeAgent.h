@@ -67,7 +67,15 @@ public:
     UPROPERTY(BlueprintReadWrite, Category = "Input")
     float DistDiagRight;
 
+    // Relative information to the exit.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
+    FVector ExitLocation;  // Must be set externally (e.g., by MazeManager)
 
+    UPROPERTY(BlueprintReadWrite, Category = "Input")
+    float RelativeAngleToExit;  // Normalized to [-1, 1]
+
+    UPROPERTY(BlueprintReadWrite, Category = "Input")
+    float NormalizedDistanceToExit;  // Normalized distance (0 to 1)
 
     // Neural network associated with this agent
     UPROPERTY(BlueprintReadWrite, Category = "AI")
