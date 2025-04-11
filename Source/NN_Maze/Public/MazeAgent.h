@@ -67,6 +67,8 @@ public:
     UPROPERTY(BlueprintReadWrite, Category = "Input")
     float DistDiagRight;
 
+
+
     // Neural network associated with this agent
     UPROPERTY(BlueprintReadWrite, Category = "AI")
     UNeuralNetwork* NeuralNet;

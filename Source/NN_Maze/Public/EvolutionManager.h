@@ -20,19 +20,32 @@ public:
     /**
      * Process the evolution generation.
      *
-     * @param CurrentGeneration The array of neural networks to evaluate (fitness values are assumed to be updated).
+     * @param CurrentGeneration The array of neural networks with updated fitness values.
      * @param NextGeneration    Output array that will be filled with the new generation.
      * @param OutGenerationFitnessMean  Returns the average fitness computed for the generation.
      * @param PopulationSize    The expected size of the population.
      */
     UFUNCTION(BlueprintCallable, Category = "Evolution")
-    void ProcessGeneration(TArray<UNeuralNetwork*>& CurrentGeneration, TArray<UNeuralNetwork*>& NextGeneration, float& OutGenerationFitnessMean, int32 PopulationSize);
+    void ProcessGeneration(TArray<UNeuralNetwork*>& CurrentGeneration,
+        TArray<UNeuralNetwork*>& NextGeneration,
+        float& OutGenerationFitnessMean,
+        int32 PopulationSize);
 
-    // Number of groups into which the population will be divided.
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Evolution")
-    int32 NumGroups;
+    // --- New evolutionary parameters ---
 
-    // Mutation rates for each group; array size should be equal to NumGroups.
+    // The fraction of the population that is kept unchanged (elitism).
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Evolution")
-    TArray<float> MutationRates;
+    float ElitismRate;
+
+    // The base mutation rate applied to offspring.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Evolution")
+    float BaseMutationRate;
+
+    // The probability to choose a gene from parent1 during crossover (uniform crossover).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Evolution")
+    float CrossoverProbability;
+
+    // A target fitness difference between the best and average fitness used for dynamic mutation.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Evolution")
+    float TargetFitnessDifference;
 };
