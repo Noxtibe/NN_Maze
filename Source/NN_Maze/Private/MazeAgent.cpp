@@ -68,28 +68,30 @@ void AMazeAgent::Tick(float DeltaTime)
     // Update sensor data via raycast (with smoothing)
     RaycastVision();
 
-    // Update relative sensors towards exit
-    if (ExitLocation != FVector::ZeroVector)
+    // Update relative sensor inputs regarding the exit.
+    if (bUseExitSensor && ExitLocation != FVector::ZeroVector)
     {
-        // Compute vector from the agent to the exit.
+        // Calculate the vector from the agent to the exit.
         FVector ToExit = ExitLocation - GetActorLocation();
         float DistanceToExit = ToExit.Size();
-        // Assume a maximum relevant distance (adjustable as needed)
+        // Set MaxRelevantDistance (you may define a local variable or use a constant; here we assume 1000.f for example)
         float MaxRelevantDistance = 1000.f;
         NormalizedDistanceToExit = FMath::Clamp(DistanceToExit / MaxRelevantDistance, 0.f, 1.f);
 
+        // Normalize the direction vector.
         FVector ToExitNormalized = ToExit.GetSafeNormal();
-        // Compute the angle (in radians) between the agent's forward and the direction to exit.
+        // Compute the angle (in radians) between the agent’s forward vector and the direction to the exit.
         float Angle = FMath::Acos(FVector::DotProduct(GetActorForwardVector(), ToExitNormalized));
-        // Determine the sign (left or right) using the cross product's Z component.
-        float Sign = (FVector::CrossProduct(GetActorForwardVector(), ToExitNormalized)).Z > 0 ? 1.0f : -1.0f;
-        // Normalize the angle to the range [-1, 1]
+        // Determine the sign of the angle (left or right) using the cross product’s Z component.
+        float Sign = (FVector::CrossProduct(GetActorForwardVector(), ToExitNormalized)).Z >= 0 ? 1.0f : -1.0f;
+        // Normalize the angle to the range [-1, 1] (assuming PI is the max relevant angle).
         RelativeAngleToExit = (Angle * Sign) / PI;
     }
     else
     {
-        RelativeAngleToExit = 0.f;
-        NormalizedDistanceToExit = 1.f;
+        // If exit sensor is disabled, use neutral values.
+        RelativeAngleToExit = 0.f;          // No directional bias.
+        NormalizedDistanceToExit = 1.f;       // Consider exit as "far away".
     }
     // --- End new sensor update ---
 

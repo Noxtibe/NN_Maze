@@ -77,6 +77,9 @@ public:
     UPROPERTY(BlueprintReadWrite, Category = "Input")
     float NormalizedDistanceToExit;  // Normalized distance (0 to 1)
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
+    bool bUseExitSensor;
+
     // Neural network associated with this agent
     UPROPERTY(BlueprintReadWrite, Category = "AI")
     UNeuralNetwork* NeuralNet;
